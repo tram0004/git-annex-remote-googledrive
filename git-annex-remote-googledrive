@@ -152,10 +152,14 @@ class GoogleRemote(ExportRemote):
     @remotemethod
     def initremote(self):
         self._send_version()
+        self.annex.info("git-annex-remote-googledrive: This is a test version for Team Drives. Don't use it for anything productive.")
         self.prefix = self.annex.getconfig('prefix')
-        root_id = self.annex.getconfig('root_id')
         if not self.prefix and not root_id:
-            raise RemoteError("Either prefix or root_id must be given.")
+            raise RemoteError("Parameter prefix missing.")
+            
+        self.team_drive_id = self.annex.getconfig('team_drive_id')
+        if not self.team_drive_id:
+            raise RemoteError("Parameter team_drive_id missing.")
 
         token_file = self.annex.getconfig('token') or 'token.json'
         self.gauth.LoadCredentialsFile(token_file)
@@ -178,11 +182,7 @@ class GoogleRemote(ExportRemote):
             raise RemoteError("Failed to authenticate with Google. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-googledrive setup'.")
 
         try:
-            if self.prefix:
-                self.root = self._getfolder(self.prefix)
-            else:
-                self.root = self.drive.CreateFile({'id': root_id})
-                self.root.FetchMetadata()
+            self.root = self._getfolder(self.prefix)
         except:
             raise RemoteError("Failed to access the remote directory. Run the command with --debug to get more information.")
 
@@ -441,9 +441,14 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
                 if create:
                     current_folder = \
                         self.drive.CreateFile({'title': folder,
-                            'parents': [{'kind': 'drive#parentReference'
-                            , 'id': current_folder['id']}],
-                            'mimeType': 'application/vnd.google-apps.folder'
+                            'parents': [{'kind': 'drive#parentReference', 
+                            'id': current_folder['id']}],
+                            'mimeType': 'application/vnd.google-apps.folder',
+                            'corpora': "teamDrive",
+                            'teamDriveId': self.team_drive_id,
+                            'includeTeamDriveItems': "true",
+                            'supportsTeamDrives': "true"
+                            
                             })
                     current_folder.Upload()
                 else:
