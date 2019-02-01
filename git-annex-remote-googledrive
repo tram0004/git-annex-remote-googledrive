@@ -154,12 +154,11 @@ class GoogleRemote(ExportRemote):
         self._send_version()
         self._info("git-annex-remote-googledrive: This is a test version for Team Drives. Don't use it for anything productive.")
         self.prefix = self.annex.getconfig('prefix')
+        root_id = self.annex.getconfig('root_id')
         if not self.prefix and not root_id:
-            raise RemoteError("Parameter prefix missing.")
-            
+            raise RemoteError("Either prefix or root_id must be given.")
+
         self.team_drive_id = self.annex.getconfig('team_drive_id')
-        if not self.team_drive_id:
-            raise RemoteError("Parameter team_drive_id missing.")
 
         token_file = self.annex.getconfig('token') or 'token.json'
         self.gauth.LoadCredentialsFile(token_file)
@@ -182,7 +181,11 @@ class GoogleRemote(ExportRemote):
             raise RemoteError("Failed to authenticate with Google. Ensure that you are connected to the internet and have successfully run 'git-annex-remote-googledrive setup'.")
 
         try:
-            self.root = self._getfolder(self.prefix)
+            if self.prefix:
+                self.root = self._getfolder(self.prefix)
+            else:
+                self.root = self.drive.CreateFile({'id': root_id})
+                self.root.FetchMetadata()
         except:
             raise RemoteError("Failed to access the remote directory. Run the command with --debug to get more information.")
 
@@ -204,6 +207,7 @@ class GoogleRemote(ExportRemote):
         self._send_version()
         self.prefix = self.annex.getconfig('prefix')
         root_id = self.annex.getconfig('root_id')
+        self.team_drive_id = self.annex.getconfig('team_drive_id')
         credentials = self.annex.getcreds('credentials')['user']
 
         try:
@@ -434,22 +438,30 @@ or re-run 'git-annex-remote-googledrive setup' followed by 'git annex enableremo
                         current_folder_id=current_folder['id'], 
                         folder=folder.replace("'", r"\'")
                      )
-            file_list = self.drive.ListFile({'q': query}).GetList()
+            request = {'q': query}
+            if self.team_drive_id:
+                request.update(
+                    {'corpora': "teamDrive",
+                     'teamDriveId': self.team_drive_id,
+                     'includeTeamDriveItems': "true",
+                     'supportsTeamDrives': "true"})
+            file_list = self.drive.ListFile(request).GetList()
             if (len(file_list) == 1):
                 current_folder = file_list[0]
             elif len(file_list) == 0:
                 if create:
-                    current_folder = \
-                        self.drive.CreateFile({'title': folder,
-                            'parents': [{'kind': 'drive#parentReference', 
-                            'id': current_folder['id']}],
-                            'mimeType': 'application/vnd.google-apps.folder',
-                            'corpora': "teamDrive",
-                            'teamDriveId': self.team_drive_id,
-                            'includeTeamDriveItems': "true",
-                            'supportsTeamDrives': "true"
-                            
-                            })
+                    request = {'title': folder,
+                            'parents': [{'kind': 'drive#parentReference'
+                            , 'id': current_folder['id']}],
+                            'mimeType': 'application/vnd.google-apps.folder'
+                            }
+                    if self.team_drive_id:
+                        request.update(
+                            {'corpora': "teamDrive",
+                             'teamDriveId': self.team_drive_id,
+                             'includeTeamDriveItems': "true",
+                             'supportsTeamDrives': "true"})
+                    current_folder = self.drive.CreateFile(request)
                     current_folder.Upload()
                 else:
                     return None
