@@ -85,7 +85,7 @@ class Key:
         with open(local_file, 'ab') as fh:
             while local_file_size < remote_file_size:
                 download_range = "bytes={}-{}".\
-                    format(local_file_size, local_file_size+chunksize)
+                    format(local_file_size, local_file_size+chunksize-1)
                     
                 # replace with googleapiclient.http.HttpRequest if possible
                 # or patch MediaIoBaseDownload to support Range
@@ -100,6 +100,8 @@ class Key:
                 else:
                     raise HttpError(resp, content)
 
+    def store(self, local_file, chunksize=10**7, progress_handler=None):
+        
 
 class GoogleDrive(Remotefolder):
     def __init__(self):
