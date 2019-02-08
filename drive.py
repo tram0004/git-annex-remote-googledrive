@@ -6,6 +6,7 @@ from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaFileUpload
 
 class Remotefolder:
     def __init__(self, service, name, id_):
@@ -40,6 +41,25 @@ class Remotefolder:
         result = self.service.files().create(body=file_metadata, fields='id, name').execute()
         result['mimeType'] = 'application/vnd.google-apps.folder'
         return self._reply_to_object(result)
+        
+    def upload_key(self, key, local_file):
+        # this won't be the final solution
+        # upload should be performed by Key.store("local_file")
+        # upload should be resumable. id to resume should be stored in annex
+        file_ = self.child(key)
+        if file_:
+            raise Exception("Filename already exists ({name}).".format(name=name))
+
+        file_metadata = {
+            'name': key, 
+            'parents': [self.id]
+        }
+        media = MediaFileUpload(local_file)
+        remote_file = self.service.files().create(body=file_metadata,
+                                                    media_body=media,
+                                                    fields='id').execute()
+        return Key(self.service, key, remote_file['id'])
+        
         
     def child_from_path(self, path):
         splitpath = path.strip('/').split('/', 1)
@@ -101,7 +121,7 @@ class Key:
                     raise HttpError(resp, content)
 
     def store(self, local_file, chunksize=10**7, progress_handler=None):
-        
+        raise NotImplementedError
 
 class GoogleDrive(Remotefolder):
     def __init__(self):
