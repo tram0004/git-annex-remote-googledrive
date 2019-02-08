@@ -132,6 +132,9 @@ class GoogleDrive(Remotefolder):
             else:
                 flow = InstalledAppFlow.from_client_secrets_file(
                     'credentials.json', SCOPES)
-                self.creds = flow.run_local_server()
+                try:
+                    self.creds = flow.run_local_server()
+                except OSError:
+                    self.creds = flow.run_console()
             with open('token.pickle', 'wb') as token:
                 pickle.dump(self.creds, token)
