@@ -28,14 +28,14 @@ class Remotefolder:
     def mkdir(self, name):
         file_ = self.child(name)
         if file_:
-            if hasattr(file_, "child"):
-                return file_
-            raise Exception("Filename already exists ({name}) and it's not a folder.".format(name=name))
+            if not hasattr(file_, "child"):
+                raise Exception("Filename already exists ({name}) and it's not a folder.".format(name=name))
+            return file_
 
         file_metadata = {
             'name': name, 
             'mimeType': 'application/vnd.google-apps.folder',
-            'parents': self.id
+            'parents': [self.id]
         }
         result = self.service.files().create(body=file_metadata, fields='id, name').execute()
         result['mimeType'] = 'application/vnd.google-apps.folder'
