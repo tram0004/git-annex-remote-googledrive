@@ -9,10 +9,31 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
 class Remotefolder:
-    def __init__(self, service, name, id_):
-        self.service = service
+
+    def __init__(self, parent, name, id_):
+        self.parent = parent
         self.id = id_
         self.name = name
+        
+    @property
+    def service(self):
+        if hasattr(self, '_service'):
+            return self._service
+        return self.parent.service
+        
+    @service.setter
+    def service(self, service):
+        self._service = service
+        
+    @property
+    def annex(self):
+        if hasattr(self, '_annex'):
+            return self._annex
+        return self.parent.annex
+        
+    @annex.setter
+    def annex(self, annex):
+        self._annex = annex
         
     def child(self, name):
         result = self.service.files().list(
@@ -58,7 +79,7 @@ class Remotefolder:
         remote_file = self.service.files().create(body=file_metadata,
                                                     media_body=media,
                                                     fields='id').execute()
-        return Key(self.service, key, remote_file['id'])
+        return Key(self, key, remote_file['id'])
         
         
     def child_from_path(self, path):
@@ -75,15 +96,24 @@ class Remotefolder:
         
     def _reply_to_object(self, reply):
         if reply['mimeType'] == 'application/vnd.google-apps.folder':
-            return Remotefolder(self.service, reply['name'], reply['id'])
+            return Remotefolder(self, reply['name'], reply['id'])
         else:
-            return Key(self.service, reply['name'], reply['id'])
+            return Key(self, reply['name'], reply['id'])
             
 class Key:
-    def __init__(self, service, key, id_=None):
+    def __init__(self, parent, key, id_=None):
         self.key = key
         self.id = id_
-        self.service = service
+        self.parent = parent
+        self.state = dict()
+        
+    @property
+    def service(self):
+        return self.parent.service
+        
+    @property
+    def annex(self):
+        return self.parent.annex
   
     def remove(self):
         self.service.files().delete(fileId=self.id).execute()
