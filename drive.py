@@ -1,6 +1,11 @@
 import pickle
 
 import os
+import json
+
+import hashlib
+from urllib.parse import urlparse
+from urllib.parse import parse_qs
 
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -152,6 +157,72 @@ class Key:
 
     def store(self, local_file, chunksize=10**7, progress_handler=None):
         raise NotImplementedError
+        
+class ResumableUploadRequest:
+    # TODO: actually implement interface for http_request
+    # TODO: error handling
+    def __init__(self, service, media_body, body, upload_id=None):
+        self.service = service
+        self.media_body = media_body
+        self.body = body
+        self.upload_id=upload_id
+        self._resumable_progress = None
+        self._resumable_uri = None
+        self._range_md5 = hashlib.md5()
+
+    @property
+    def upload_id(self):
+        if self._upload_id is None:
+            self._upload_id = parse_qs(urlparse(self.resumable_uri).query)['upload_id'][0]
+        return self._upload_id
+    
+    @upload_id.setter
+    def upload_id(self, upload_id):
+        self._upload_id=upload_id
+        if self._upload_id:
+            self._resumable_uri = "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id={}".format(upload_id)
+        
+    @property
+    def resumable_uri(self):
+        if self._resumable_uri is None:
+            api_url = "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable" 
+            status, resp = self.service._http.request(api_url, method='POST', headers={'Content-Type':'application/json; charset=UTF-8'}, body=json.dumps(self.body)) 
+            self._resumable_uri = status['location']
+        return self._resumable_uri
+        
+    @resumable_uri.setter
+    def resumable_uri(self, resumable_uri):
+        self._resumable_uri = resumable_uri
+        
+            
+    @property
+    def resumable_progress(self):
+        if self._resumable_progress is None:
+            if self._resumable_uri is None:
+                return 0
+            upload_range = "bytes */{}".format(self.media_body.size())
+            status, resp = self.service._http.request(self.resumable_uri, method='PUT', headers={'Content-Length':'0', 'Content-Range':upload_range})
+            byte_range = status['range']
+            self._resumable_progress = int(byte_range.replace('bytes=0-', '', 1))+1
+        return self._resumable_progress
+
+    def next_chunk(self):
+        content_length = min(self.media_body.size()-self.resumable_progress, self.media_body.chunksize()) 
+        upload_range = "bytes {}-{}/{}".format(self.resumable_progress, self.resumable_progress+content_length-1, self.media_body.size()) 
+        bytes = self.media_body.getbytes(self.resumable_progress, content_length)
+        status, resp = self.service._http.request(self.resumable_uri, method='PUT', headers={'Content-Length':str(content_length), 'Content-Range':upload_range}, body=bytes)
+        if resp:
+            pass
+            #TODO upload finished
+        elif status['status'] == '308':
+            self._range_md5.update(bytes)
+            if status['x-range-md5'] != self._range_md5.hexdigest():
+                raise Exception("Checksum mismatch. Need to repeat upload.")
+            self._resumable_progress += content_length
+        return status, resp
+        # TODO (interface) return resumable status object
+
+
 
 class GoogleDrive(Remotefolder):
     def __init__(self):
